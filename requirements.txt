@@ -1,0 +1,10 @@
+ezdxf>=1.4.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+numpy>=1.24.0
+jieba>=0.42.1
+httpx>=0.25.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+openai>=1.6.0
+anthropic>=0.49.0

@@ -1,0 +1,74 @@
+# ===================================================================
+# 云原生构建配置文件（GPU版本）
+# ===================================================================
+
+# -----------------------------------------------------------------------------
+# Docker 镜像构建与推送
+# -----------------------------------------------------------------------------
+main:
+  push:
+    - services:
+        - docker
+      stages:
+        # 检查 Dockerfile 是否变更
+        - name: check Dockerfile changes
+          script: |
+            # 获取与上一个 commit 的变更文件
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+            
+            echo "变更文件列表:"
+            echo "${CHANGED_FILES:-无变更}"
+            echo "---"
+            
+            # 检查 Dockerfile 是否变更
+            HAS_CONFIG_CHANGE="false"
+            for file in ${CHANGED_FILES}; do
+              if [[ "${file}" == "Dockerfile" ]] || [[ "${file}" == *"/Dockerfile" ]]; then
+                echo "检测到配置变更: ${file}"
+                HAS_CONFIG_CHANGE="true"
+                break
+              fi
+            done
+            
+            echo "HAS_CONFIG_CHANGE=${HAS_CONFIG_CHANGE}" >> /tmp/build_env
+            
+            if [[ "${HAS_CONFIG_CHANGE}" == "true" ]]; then
+              echo "将触发镜像构建"
+            else
+              echo "跳过镜像构建（无配置变更）"
+            fi
+
+        # Docker 镜像构建与推送（超时: 60分钟）
+        - name: docker build & push
+          timeout: 3600s
+          script: |
+            source /tmp/build_env 2>/dev/null || true
+            if [[ "${HAS_CONFIG_CHANGE}" != "true" ]]; then
+              echo "跳过镜像构建与推送（无配置变更）"
+              exit 0
+            fi
+            docker login -u cnb -p "cRzefl5jMNg0X14a2hMx2n5OEWA" docker.cnb.cool
+            echo "构建镜像: docker.cnb.cool/oriondawn/astradraft:latest"
+            docker build -t docker.cnb.cool/oriondawn/astradraft:latest .
+            docker push docker.cnb.cool/oriondawn/astradraft:latest
+            echo "latest 镜像更新完成"
+
+# -----------------------------------------------------------------------------
+# 云原生GPU开发环境
+# -----------------------------------------------------------------------------
+$:
+  vscode:
+    - name: AstraDraft-GPU
+      runner:
+        tags: cnb:arch:amd64:gpu:L40
+      # ✅ 显式申请1张L40 GPU卡
+      docker:
+        image: docker.cnb.cool/oriondawn/astradraft:latest
+      services:
+        - vscode
+        - docker
+      stages:
+        # 工作空间初始化
+        - name: workspace init
+          script: |
+            echo "🚀 云原生GPU开发环境已就绪"
