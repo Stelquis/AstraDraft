@@ -1,5 +1,5 @@
 # ===================================================================
-# AstraDraft .gitignore
+# .gitignore
 # ===================================================================
 
 # 生成的 DXF 文件（由 DWG 转换而来）
@@ -24,6 +24,20 @@ __pycache__/
 
 # Qoder CLI
 .qoder/
+
+# XeLaTeX 编译中间文件
+*.aux
+*.log
+*.toc
+*.out
+*.lof
+*.lot
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# LaTeX 生成的 PDF（源文件是 .tex）
+# *.pdf
 
 # 临时文件
 *.tmp

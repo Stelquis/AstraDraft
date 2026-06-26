@@ -157,31 +157,36 @@ class ParameterIndex:
                 ))
 
             if ("色 调" in txt or "色调" in txt) and "色调" not in seen:
+                all_colors = []
                 for t2 in texts:
-                    if t2.text.strip() in ("黑色", "浅蓝色", "白色"):
-                        seen.add("色调")
-                        self._params.append(Parameter(
-                            name="色调", value=0, unit="",
-                            aliases=["色调", "颜色", "color"],
-                            layer=t2.layer, raw_text=t2.text.strip(),
-                        ))
-                        break
+                    c = t2.text.strip()
+                    if c in ("黑色", "浅蓝色", "白色"):
+                        all_colors.append(c)
+                if all_colors:
+                    seen.add("色调")
+                    self._params.append(Parameter(
+                        name="色调", value=0, unit="",
+                        aliases=["色调", "颜色", "color", "色"],
+                        layer="", raw_text=", ".join(all_colors),
+                    ))
 
             if "成形方法" in txt and "成形方法" not in seen:
+                forming_texts = []
                 for t2 in texts:
-                    if "注射" in t2.text or "挤压" in t2.text or "压缩" in t2.text:
-                        seen.add("成形方法")
-                        self._params.append(Parameter(
-                            name="成形方法", value=0, unit="",
-                            aliases=["成形方法", "成形", "成型", "加工方法"],
-                            layer=t2.layer, raw_text=t2.text.strip(),
-                        ))
-                        break
-                if "成形方法" not in seen:
+                    if "注射" in t2.text or "挤压" in t2.text or "压缩" in t2.text or "模压" in t2.text:
+                        forming_texts.append(t2.text.strip())
+                if forming_texts:
                     seen.add("成形方法")
                     self._params.append(Parameter(
                         name="成形方法", value=0, unit="",
-                        aliases=["成形方法", "成形", "成型", "加工方法"],
+                        aliases=["成形方法", "成形", "成型", "加工方法", "注塑"],
+                        layer="", raw_text=" | ".join(forming_texts),
+                    ))
+                elif "成形方法" not in seen:
+                    seen.add("成形方法")
+                    self._params.append(Parameter(
+                        name="成形方法", value=0, unit="",
+                        aliases=["成形方法", "成形", "成型", "加工方法", "注塑"],
                         layer=ann.layer, raw_text=txt,
                     ))
 
@@ -230,6 +235,73 @@ class ParameterIndex:
                 aliases=["产品", "产品名称", "零件名", "图名"],
                 layer="", raw_text="过滤网",
             ))
+
+        # --- 编织方式 ---
+        if "编织方式" not in seen:
+            for t in texts:
+                txt = t.text.strip()
+                if "蜂窝形" in txt or "编织" in txt:
+                    seen.add("编织方式")
+                    self._params.append(Parameter(
+                        name="编织方式", value=0, unit="",
+                        aliases=["编织方式", "编织", "网孔形状", "weave", "weave pattern"],
+                        layer=t.layer, raw_text=txt,
+                    ))
+                    break
+
+        # --- 防菌/抗菌 ---
+        if "防菌型" not in seen:
+            for t in texts:
+                txt = t.text.strip()
+                if "防菌" in txt or "抗菌" in txt:
+                    seen.add("防菌型")
+                    self._params.append(Parameter(
+                        name="防菌型", value=0, unit="",
+                        aliases=["防菌", "防菌型", "抗菌", "抗菌型", "antibacterial"],
+                        layer=t.layer, raw_text=txt,
+                    ))
+                    break
+
+        # --- 退火处理 ---
+        if "退火处理" not in seen:
+            for t in texts:
+                txt = t.text.strip()
+                if "退火" in txt:
+                    seen.add("退火处理")
+                    self._params.append(Parameter(
+                        name="退火处理", value=0, unit="",
+                        aliases=["退火", "退火处理", "annealing", "热处理"],
+                        layer=t.layer, raw_text=txt,
+                    ))
+                    break
+
+        # --- 滤网支数 ---
+        if "滤网支数" not in seen:
+            for t in texts:
+                txt = t.text.strip()
+                if "支" in txt and any(c.isdigit() for c in txt):
+                    seen.add("滤网支数")
+                    self._params.append(Parameter(
+                        name="滤网支数", value=0, unit="",
+                        aliases=["支数", "多少支", "count", "支"],
+                        layer=t.layer, raw_text=txt,
+                    ))
+                    break
+
+        # --- 部品表信息 ---
+        if "部品表" not in seen:
+            parts = []
+            for t in texts:
+                txt = t.text.strip()
+                if "部品" in txt and not txt.startswith("部品   尺寸"):
+                    parts.append(txt)
+            if parts:
+                seen.add("部品表")
+                self._params.append(Parameter(
+                    name="部品表", value=0, unit="",
+                    aliases=["部品", "部品表", "零件表", "部件", "BOM", "parts", "零件"],
+                    layer="", raw_text=" | ".join(parts),
+                ))
 
         if "使用温度" not in seen:
             for t in texts:
@@ -286,7 +358,7 @@ class ParameterIndex:
 
         if "耐酸测试介质" not in seen:
             for t in texts:
-                if "醋酸" in t.text or "盐酸" in t.text:
+                if "醋酸" in t.text or "盐酸" in t.text or "硫酸" in t.text:
                     seen.add("耐酸测试介质")
                     self._params.append(Parameter(
                         name="耐酸测试介质", value=0, unit="",

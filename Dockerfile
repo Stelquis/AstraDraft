@@ -156,6 +156,7 @@ RUN uv pip install --python /opt/venv \
 #     mhutchie.git-graph            Git 提交图可视化
 #   编辑器增强:
 #     oderwat.indent-rainbow        缩进彩虹，代码层级可视化
+#     anwar.papyrus-pdf             PDF 文件预览与查看
 #   AI 编程助手:
 #     anthropic.claude-code         Claude Code AI 编程助手
 #     tencent-cloud.coding-copilot  CodeBuddy AI 辅助编程，代码补全和生成
@@ -168,6 +169,7 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh && \
     code-server --install-extension redhat.vscode-yaml && \
     code-server --install-extension mhutchie.git-graph && \
     code-server --install-extension oderwat.indent-rainbow && \
+    code-server --install-extension anwar.papyrus-pdf && \
     code-server --install-extension anthropic.claude-code && \
     code-server --install-extension tencent-cloud.coding-copilot && \
     code-server --install-extension CloudStudio.live-server && \

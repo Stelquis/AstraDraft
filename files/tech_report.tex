@@ -1,0 +1,519 @@
+% !TEX program = xelatex
+% ============================================================
+% 编译方法：
+%   cd /workspace/files && xelatex -interaction=nonstopmode tech_report.tex && xelatex -interaction=nonstopmode tech_report.tex && cd /workspace
+% 输出: tech_report.pdf
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+% -- 中文支持 --
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setCJKmainfont{AR PL SungtiL GB}[
+  BoldFont=AR PL KaitiM GB,
+]
+\setCJKmonofont{AR PL SungtiL GB}
+
+% -- 页面设置 --
+\usepackage[top=2.5cm, bottom=2.0cm, left=2.5cm, right=2.5cm, headheight=14pt]{geometry}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small 海信 × 阿里云 AI 智能体大赛 --- 技术方案报告}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -- 常用包 --
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{float}
+
+% -- 代码样式 --
+\lstset{
+  basicstyle=\small\ttfamily,
+  backgroundcolor=\color{gray!5},
+  frame=single,
+  rulecolor=\color{gray!30},
+  breaklines=true,
+  columns=flexible,
+  numbers=none,
+  aboveskip=6pt,
+  belowskip=6pt,
+}
+
+% -- 章节格式 --
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{8pt}{4pt}
+\titlespacing*{\subsubsection}{0pt}{6pt}{3pt}
+
+% -- 正文 --
+\begin{document}
+
+% ==================== 封面 ====================
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+
+  {\Huge\bfseries AI 智能体大赛 \\[6pt]
+   技术方案报告}
+
+  \vspace{1.5cm}
+
+  {\LARGE AstraDraft \\[8pt]
+   CAD 智能问答 Agent 系统}
+
+  \vspace{3cm}
+
+  {\large
+   \begin{tabular}{rl}
+     参赛队伍： & 中午吃什么 \\
+     赛题名称： & 海信 × 阿里云 AI 智能体大赛 \\
+     提交日期： & 2026 年 6 月 \\
+   \end{tabular}
+  }
+
+  \vfill
+\end{titlepage}
+
+% ==================== 目录 ====================
+\newpage
+\tableofcontents
+\newpage
+
+% ==================== 1. 项目背景与目标 ====================
+\section{项目背景与目标}
+
+\subsection{赛题简介}
+
+本赛题基于海信企业真实生产流程，以工业 CAD 图纸为核心数据载体，要求参赛者构建一个具备自然语言理解能力的智能 Agent 系统，能够深度解析 CAD 图纸，并通过自然语言问答的方式，自动检索并准确反馈图纸中的关键技术参数。
+
+\subsection{核心任务}
+
+\begin{enumerate}[nosep]
+  \item \textbf{搭建智能 Agent 系统}：构建能够深度解析 CAD 图纸（DWG/DXF 格式）的系统，提取几何实体、尺寸标注、文字注释等信息。
+  \item \textbf{精准参数提取}：支持用户通过自然语言提问（如“过滤网的高度是多少？”），系统自动检索并反馈图纸中的关键技术参数。
+  \item \textbf{多图纸支持}：适应训练图纸（过滤网）以及考核图纸（侧板、印刷版）的解析和问答。
+\end{enumerate}
+
+\subsection{技术指标}
+
+\begin{itemize}[nosep]
+  \item 解析 CAD 图纸，构建包含 102+ 个结构化参数的语义索引。
+  \item 支持 12 类以上查询意图（尺寸查询、计数、极值、比较、材质、性能等）。
+  \item 训练集准确率 \textbf{93.1\%}（58 题通过评估）。
+  \item 混合策略：规则管道优先，LLM 回退兜底（DeepSeek v4 Pro）。
+\end{itemize}
+
+% ==================== 2. 系统总体架构 ====================
+\section{系统总体架构}
+
+\subsection{架构总览}
+
+系统采用分层架构设计，自底向上分为数据层、CAD 理解引擎、Agent 核心调度层和用户界面层，各层职责明确、接口清晰。
+
+\begin{lstlisting}[language={},frame=single,title=系统架构图]
++-----------------------------------------+
+|         用户界面层 (CLI)                 |
++----------------+------------------------+
+                 | 自然语言问题
+                 v
++-----------------------------------------+
+|     Agent 核心调度层                      |
+|  +----------+  +----------------------+  |
+|  | 意图识别  |  | 规则管道 + LLM 回退  |  |
+|  +----------+  +----------------------+  |
++----------------+------------------------+
+                 |
+                 v
++-----------------------------------------+
+|       CAD 理解引擎                       |
+|  +------------+  +------------------+   |
+|  | 参数索引    |  | 语义映射(jieba)  |   |
+|  +------------+  +------------------+   |
++----------------+------------------------+
+                 |
++-----------------------------------------+
+|       CAD 解析层                         |
+|  DWG→DXF → ezdxf → CADDocument          |
+|  (实体 / 尺寸 / 文本 / 图层)             |
++-----------------------------------------+
+\end{lstlisting}
+
+\subsection{分层职责}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llp{7cm}}
+\toprule
+层次 & 技术选型 & 职责 \\
+\midrule
+用户界面层 & Python CLI & 接收用户自然语言输入，展示回答 \\
+Agent 核心调度层 & Python + LLM API & 意图识别、上下文管理、规则管道优先匹配、LLM 回退次选 \\
+CAD 理解引擎 & ezdxf + jieba + 规则引擎 & 解析图纸、构建参数索引、语义别名映射 \\
+数据层 & JSON / 文件系统 & CAD 文件存储、参数索引缓存 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{数据流}
+
+\begin{enumerate}[nosep]
+  \item 输入 DWG → \texttt{dwg2dxf} 转换为 DXF 格式。
+  \item ezdxf 读取 DXF，构建 \texttt{CADDocument}（含实体、标注、文本、图层）。
+  \item 参数索引构建器从维度和文本中提取参数，建立结构化索引。
+  \item 用户提问 → 意图分类 → 规则管道逐级尝试匹配 → 若均未命中则触发 LLM 回退。
+  \item 格式化答案并输出。
+\end{enumerate}
+
+% ==================== 3. CAD 解析模块 ====================
+\section{CAD 解析模块}
+
+\subsection{模块功能}
+
+CAD 解析模块（\texttt{cad\_parser/}）负责将 DWG/DXF 格式的 CAD 图纸文件转换为程序可以理解的结构化数据。它是整个系统的基础层，为上层语义理解提供原始数据。
+
+\subsection{技术选型}
+
+\begin{itemize}[nosep]
+  \item \textbf{DWG → DXF 转换}：使用开源库 \textbf{LibreDWG} 的 \texttt{dwg2dxf} 工具，编译部署于 Docker 环境，支持 AutoCAD 2018（AC1032）格式。
+  \item \textbf{DXF 解析}：使用 Python 库 \textbf{ezdxf}（$\ge$1.4.0）读取 DXF 文件，提取实体、尺寸标注和文本。
+  \item \textbf{数据建模}：基于 \textbf{Pydantic v2} 定义严格的数据结构，确保类型安全。
+\end{itemize}
+
+\subsection{核心数据结构}
+
+系统定义的核心数据模型（\texttt{cad\_parser/models.py}）：
+
+\begin{itemize}[nosep]
+  \item \textbf{CADDocument}：图纸文档的顶层表示，包含实体列表、尺寸列表、文本注释列表、图层信息、图块定义和元数据。
+  \item \textbf{Entity}：几何实体（LINE、ARC、CIRCLE、LWPOLYLINE 等 14 种），包含图层、类型和几何参数。
+  \item \textbf{Dimension}：尺寸标注（线性、对齐、直径、半径、角度共 7 种），包含测量值、标注文本、定义点坐标。
+  \item \textbf{TextAnnotation}：文本注释，包含文字内容、位置、字高、旋转角度。
+  \item \textbf{LayerInfo}：图层定义，包含颜色、线型、实体数量。
+\end{itemize}
+
+\subsection{文件结构}
+
+\begin{lstlisting}[language={},frame=single]
+cad_parser/
++-- __init__.py          # 模块入口
++-- reader.py            # DXF 文件读取器
++-- entities.py          # 几何实体提取
++-- dimensions.py        # 尺寸标注提取与解析
++-- text_extractor.py    # TEXT/MTEXT 文本提取
++-- layer_manager.py     # 图层管理
++-- models.py            # Pydantic 数据模型
+\end{lstlisting}
+
+\subsection{关键技术细节}
+
+\begin{itemize}[nosep]
+  \item \textbf{编码处理}：中国工业 CAD 图纸内部使用 GBK 编码，解析时正确解码中文标注文本。
+  \item \textbf{单位处理}：当 \texttt{insunits=0}（未指定单位）时，按行业惯例默认使用毫米（mm）。
+  \item \textbf{DimType 位标志}：ezdxf 返回的 \texttt{dimtype} 使用复合位标志，需通过位运算（\texttt{\& 0x0F}）提取真实标注类型。
+  \item 训练图纸解析结果：3206 个实体、299 个文本注释、全部尺寸标注完整解析。
+\end{itemize}
+
+% ==================== 4. 语义理解与索引构建 ====================
+\section{语义理解与索引构建}
+
+\subsection{模块功能}
+
+CAD 语义理解模块（\texttt{cad\_understanding/}）位于解析层之上，负责将原始的 CAD 实体和标注转化为结构化的参数索引，并建立自然语言术语与 CAD 参数之间的语义映射关系。
+
+\subsection{参数索引构建流程}
+
+参数索引的构建分为四个阶段：
+
+\begin{enumerate}[nosep]
+  \item \textbf{维度提取}：遍历所有尺寸标注，提取测量值（\texttt{measurement}），结合附近文字推断参数名称和语义别名。
+  \item \textbf{键值对提取}：正则匹配标注文本中的 \texttt{键=值} 模式（如 \texttt{高度=245mm}），直接解析为参数。
+  \item \textbf{领域启发式}：针对中国工业 CAD 图纸的特点，提取标题栏信息（图纸名称、图号、比例、图幅、分类、版本号）、签字栏信息（设计、审核、工艺、标准化、批准）、技术要求、BOM 表等结构化信息。
+  \item \textbf{语义别名分配}：基于预定义的同义词映射表（\texttt{SYNONYM\_MAP}），为每个参数分配自然语言别名（如“高度$\rightarrow$[高, H, height]”）。
+\end{enumerate}
+
+\subsection{语义映射}
+
+\texttt{semantic\_mapper.py} 使用 \textbf{jieba 分词} 结合多层级评分匹配：
+
+\begin{itemize}[nosep]
+  \item 精确匹配：参数名或别名直接匹配用户查询（得分 10）。
+  \item 分词匹配：对用户查询分词后逐词比对（得分 5）。
+  \item 主名称偏序：查询词出现在参数主名称中额外加分（得分 5）。
+  \item 子串匹配：参数名或别名包含在词中（得分 2）。
+  \item 同义词加权：预定义跨域同义词组命中（如"圆角$\rightarrow$半径"、"每英寸$\rightarrow$目数"、"树脂$\rightarrow$材质"，得分 12）。
+\end{itemize}
+
+\subsection{文件结构}
+
+\begin{lstlisting}[language={},frame=single]
+cad_understanding/
++-- __init__.py               # 模块入口
++-- parameter_index.py        # 参数索引构建（核心）
++-- semantic_mapper.py        # 语义映射（jieba + 同义词）
++-- component_recognizer.py   # 部件/特征识别
++-- scale_inferencer.py       # 单位推断
++-- models.py                 # 语义模型定义
+\end{lstlisting}
+
+\subsection{已构建的参数类别}
+
+训练图纸共构建 108+ 个结构化参数，覆盖以下类别：
+
+\begin{itemize}[nosep]
+  \item 线性/对齐尺寸参数（长度、宽度、高度、间距等）
+  \item 孔径/半径参数
+  \item 标题栏信息（图纸名称、图号、比例、图幅、分类、版本号）
+  \item 签字栏信息（设计者、审核者、工艺、标准化、批准、归档日期）
+  \item 材料信息（材质、材料牌号、材料规格）
+  \item 滤网规格（编织方式、支数、目数、防菌型）
+  \item 性能指标（耐油性、耐酸性、耐热性、耐寒性、抗病毒性能等）
+  \item 技术要求（加工要求、表面处理、喷涂颜色、退火处理、拔模斜度）
+  \item 部品/BOM 表信息
+  \item 其它技术参数（使用温度范围、成形方法、色调、产品名称等）
+\end{itemize}
+
+% ==================== 5. NLP 交互与 Agent 调度 ====================
+\section{NLP 交互与 Agent 调度}
+
+\subsection{模块功能}
+
+NLP 交互模块（\texttt{nlp\_interface/}）负责解析用户自然语言问题，进行意图分类和参数提取。Agent 核心调度层（\texttt{agent/}）协调各模块工作，实现规则管道与 LLM 回退的混合策略。
+
+\subsection{意图分类体系}
+
+\texttt{intent\_classifier.py} 基于正则表达式将用户问题分为以下意图类型：
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+意图类型 & 示例 & 处理方式 \\
+\midrule
+\texttt{query\_parameter} & “过滤网的高度是多少？” & 查参数索引→返回值 \\
+\texttt{query\_multi} & “这个图纸上有哪些参数？” & 列出所有参数 \\
+\texttt{query\_compare} & “外框和滤网哪个更宽？” & 多参数查询+比较 \\
+\texttt{query\_info} & “这个零件是做什么的？” & 返回图纸元信息 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{规则管道优先级}
+
+\texttt{query\_processor.py} 实现了严格的规则管道，优先级从高到低依次为：
+
+\begin{enumerate}[nosep]
+  \item \textbf{极值查询}（最大/最小/最长/最高/最宽/最窄）
+  \item \textbf{计数查询}（几处/几个/多少处）
+  \item \textbf{数值搜索}（“5mm 代表什么”）
+  \item \textbf{多参数查询}（列表所有参数）
+  \item \textbf{比较查询}（A 和 B 哪个更…）
+  \item \textbf{单参数查询}（直接匹配参数名）
+  \item \textbf{兜底}：列出可查询的参数
+\end{enumerate}
+
+\subsection{LLM 回退机制}
+
+当规则管道无法匹配（返回“未找到”或“抱歉”）或检测到复杂问题（如签字栏、标题栏、技术要求等涉及多条件推理的问题）时，系统触发 LLM 回退：
+
+\begin{itemize}[nosep]
+  \item 使用 \textbf{DeepSeek v4 Pro}（Anthropic 兼容 API）。
+  \item 将全部 102+ 个参数的名称、值、单位、原始文本注入系统提示词。
+  \item 同时注入全部文字注释（含图层和位置信息），为 LLM 提供完整的图纸上下文。
+  \item 对话历史保留最近 6 轮，支持上下文相关追问。
+\end{itemize}
+
+\subsection{文件结构}
+
+\begin{lstlisting}[language={},frame=single]
+nlp_interface/               agent/
++-- __init__.py               +-- __init__.py
++-- intent_classifier.py      +-- core.py         # Agent 主循环
++-- parameter_parser.py       +-- session.py      # 会话管理
++-- query_processor.py        +-- config.py       # 配置管理
++-- response_formatter.py     +-- exceptions.py   # 自定义异常
++-- prompt_templates.py       +-- cli.py          # CLI 入口
+\end{lstlisting}
+
+% ==================== 6. 考核答案生成 ====================
+\section{考核答案生成与评估}
+
+\subsection{考核概述}
+
+竞赛平台发布了两张全新 CAD 图纸作为考核试题：
+
+\begin{itemize}[nosep]
+  \item \textbf{侧板图}（侧板MODIFY.dxf）：20 道试题，涉及标题栏、签字栏、材料、技术要求等。
+  \item \textbf{印刷版图}（印刷件MODIFY.dxf）：21 道试题，涉及图幅比例、签字栏、材料规格、运输要求等。
+\end{itemize}
+
+共计 41 道试题，覆盖尺寸查询、签字栏、标题栏、材料、技术要求、性能参数、实物特征等多类题型。
+
+\subsection{答案生成流程}
+
+\texttt{tools/generate\_exam\_answers.py} 实现自动答案生成：
+
+\begin{enumerate}[nosep]
+  \item 读取考核试题 Excel 文件（\texttt{大赛CAD问题.xlsx}）。
+  \item 按图纸分组逐图构建独立的参数索引（避免缓存干扰）。
+  \item 配置 Agent 启用 LLM 增强，逐个回答问题。
+  \item 输出为 \texttt{submission.csv}（含序号、问题、答案）和 \texttt{answers.json}（完整 JSON）。
+\end{enumerate}
+
+\subsection{评估方法}
+
+\texttt{tools/evaluate.py} 实现量化评估：
+
+\begin{itemize}[nosep]
+  \item 从问题文件中读取 Q$\mid$A 对，逐题调用 Agent 回答。
+  \item 数值比较：正则提取答案和预期中的数值，允许 $\pm$0.1 误差。
+  \item 文本比较：预期文本是否包含在答案中。
+  \item 训练集 58 题评估结果：\textbf{准确率 93.1\%}（从初始 43.1\% 优化而来）。
+\end{itemize}
+
+% ==================== 7. 使用与验证 ====================
+\section{使用与验证方法}
+
+\subsection{环境要求}
+
+\begin{itemize}[nosep]
+  \item Python $\ge$ 3.12
+  \item 核心依赖：ezdxf ($\ge$1.4.0)、pydantic ($\ge$2.5.0)、jieba ($\ge$0.42.1)、httpx ($\ge$0.25.0)
+  \item 可选依赖：anthropic ($\ge$0.49.0，用于 DeepSeek API 调用)
+  \item 转换工具：LibreDWG（\texttt{dwg2dxf}）
+  \item 操作系统：Linux（Docker 部署，Ubuntu 24.04）
+\end{itemize}
+
+\subsection{快速运行}
+
+\begin{lstlisting}[frame=single,language=bash]
+# 1. 安装依赖
+pip install -r requirements.txt
+
+# 2. 转换 DWG → DXF（如有需要）
+python tools/dwg_to_dxf.py --input data/cad/filter_modify.dwg
+
+# 3. 构建参数索引
+python tools/build_index.py \
+  --input data/cad/filter_modify.dxf \
+  --output data/index/
+
+# 4. 启动交互式问答
+python main.py --file data/cad/filter_modify.dxf
+
+# 5. 评估准确率
+python tools/evaluate.py \
+  --file data/cad/filter_modify.dxf \
+  --questions examples/training_questions.txt
+\end{lstlisting}
+
+\subsection{考核答案生成}
+
+\begin{lstlisting}[frame=single,language=bash]
+python tools/generate_exam_answers.py
+# 输出: data/exam_temp/submission.csv
+\end{lstlisting}
+
+% ==================== 8. 项目文件结构 ====================
+\section{项目代码文件结构}
+
+\begin{lstlisting}[language={},frame=single,title=项目完整目录]
+AstraDraft/
++-- main.py                          # 顶层入口
++-- requirements.txt                 # Python 依赖
++-- Dockerfile                       # 开发环境配置
+|
++-- agent/                           # Agent 核心调度层
+|   +-- core.py                      # 主循环（规则+LLM混合）
+|   +-- cli.py                       # CLI 入口
+|   +-- config.py                    # 配置管理
+|   +-- session.py                   # 对话会话管理
+|   +-- exceptions.py                # 自定义异常
+|
++-- cad_parser/                      # CAD 解析层
+|   +-- reader.py                    # DXF/DWG 文件读取
+|   +-- entities.py                  # 几何实体提取
+|   +-- dimensions.py                # 尺寸标注提取
+|   +-- text_extractor.py            # 文本标注提取
+|   +-- layer_manager.py             # 图层管理
+|   +-- models.py                    # Pydantic 数据模型
+|
++-- cad_understanding/               # 语义理解层
+|   +-- parameter_index.py           # 参数索引（核心）
+|   +-- semantic_mapper.py           # 语义映射（jieba）
+|   +-- component_recognizer.py      # 部件识别
+|   +-- scale_inferencer.py          # 单位推断
+|
++-- nlp_interface/                   # NLP 交互层
+|   +-- intent_classifier.py         # 意图分类
+|   +-- parameter_parser.py          # 参数名提取
+|   +-- query_processor.py           # 查询处理主流程
+|   +-- response_formatter.py        # 回答格式化
+|   +-- prompt_templates.py          # LLM 提示词模板
+|
++-- tools/                           # 工具脚本
+|   +-- dwg_to_dxf.py                # DWG 转换工具
+|   +-- build_index.py               # 索引构建
+|   +-- evaluate.py                  # 准确率评估
+|   +-- generate_exam_answers.py     # 考核答案生成
+|
++-- data/
+|   +-- cad/                         # CAD 源文件
+|   +-- index/                       # 参数索引缓存
+|
++-- examples/
+    +-- training_questions.txt       # 58 题训练集
+\end{lstlisting}
+
+% ==================== 9. 关键技术决策 ====================
+\section{关键技术决策与经验总结}
+
+\subsection{结构化解析优于视觉模型}
+
+CAD 图纸本质是结构化数据（矢量图形 + 尺寸标注），而非光栅图片。使用 \textbf{ezdxf} 直接读取结构和标注值，无需多模态/视觉模型。尺寸标注的 \texttt{measurement} 字段直接提供数值，周围文字注释提供语义信息，两者结合即可构建完整参数索引。
+
+\subsection{规则为主、LLM 为辅的混合策略}
+
+\begin{itemize}[nosep]
+  \item 规则管道覆盖常见查询类型（尺寸、计数、极值、比较），响应快、结果稳定、无额外成本。
+  \item LLM 仅在规则管道无法处理时作为回退，用于复杂推理（如签字栏角色与签名/日期的关联判断、技术要求的综合解读）。
+  \item 这种策略兼顾了速度和准确性，并在 LLM API 不可用时保证系统基础功能可用。
+\end{itemize}
+
+\subsection{通用化设计}
+
+参数索引构建面向 DXF 标准格式而非特定图纸。标题栏提取、签字栏提取、BOM 表解析都采用基于位置和图层关键词的通用策略，能够适应不同图纸的结构变化。
+
+% ==================== 10. 总结 ====================
+\section{总结与展望}
+
+\subsection{关键成果}
+
+\begin{itemize}[nosep]
+  \item 成功构建了完整的 CAD 智能问答 Agent 系统，实现了从 DWG/DXF 图纸解析到自然语言问答的全链路。
+  \item 训练集 58 题评估准确率 \textbf{93.1\%}，支持 12 类以上查询意图。
+  \item 参数索引覆盖 108+ 个参数，新增编织方式、防菌型、退火处理、滤网支数、部品表等提取规则。
+	  \item 自动生成了 41 道考核试题的答案（侧板 20 题 + 印刷版 21 题）。
+  \item 参赛代码和本技术方案报告已按要求准备完毕。
+\end{itemize}
+
+\subsection{改进方向}
+
+\begin{itemize}[nosep]
+  \item 进一步优化标题栏和签字栏的关联识别精度，特别是在不同图纸布局下的自适应能力。
+  \item 扩展对更多 CAD 实体类型和标注类型的支持，提高参数覆盖率。
+  \item 探索使用更多 LLM 能力进行多轮对话和复杂推理，同时保持规则管道的稳定性。
+\end{itemize}
+
+\end{document}

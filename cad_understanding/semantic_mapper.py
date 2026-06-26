@@ -15,12 +15,25 @@ SYNONYM_MAP: Dict[str, List[str]] = {
     "宽度": ["宽", "W", "width", "宽度", "总宽", "总宽度"],
     "长度": ["长", "L", "length", "长度", "总长", "总长度"],
     "直径": ["孔径", "D", "diameter", "直径", "孔直径"],
-    "半径": ["R", "radius", "半径"],
+    "半径": ["R", "radius", "半径", "圆角", "fillet", "倒角"],
     "厚度": ["厚", "T", "thickness", "厚度", "板厚"],
     "间距": ["间隔", "gap", "spacing", "间距", "距离"],
-    "孔径": ["孔直径", "mesh size", "孔径", "网孔"],
+    "孔径": ["孔直径", "mesh size", "孔径", "网孔", "目", "目数", "mesh", "每英寸"],
     "外径": ["外径", "OD", "外直径"],
     "内径": ["内径", "ID", "内直径"],
+    # 材料/树脂相关同义词
+    "材质": ["材质", "材料", "material", "树脂", "resin", "原料"],
+    # 成形方法
+    "成形方法": ["成形", "成型", "注射", "注塑", "模压", "压缩", "挤压", "加工方法", "加工方式"],
+    # 性能
+    "耐油性": ["耐油", "耐油性", "oil resistance"],
+    "耐酸性": ["耐酸", "耐酸性", "acid resistance"],
+    "耐寒性": ["耐寒", "耐寒性", "cold resistance"],
+    "耐热性": ["耐热", "耐热性", "heat resistance"],
+    # 颜色
+    "色调": ["色调", "颜色", "color", "色"],
+    # 防菌/抗菌
+    "防菌": ["防菌", "抗菌", "防菌型", "antibacterial", "anti-bacterial"],
 }
 
 _jieba_initialized = False
@@ -82,10 +95,16 @@ class SemanticMapper:
                 elif name in word.lower() or word.lower() in name:
                     score += 2
 
+        # 主名称分词后匹配加分（"滤网材料" 中含 "滤网" 匹配查询中的"滤网"）
+        for word in words:
+            wl = word.lower()
+            if len(wl) >= 2 and wl in param.name.lower():
+                score += 5
+
         for cn_key, synonyms in SYNONYM_MAP.items():
             query_has_synonym = any(s in query for s in synonyms)
             param_has_name = any(s in all_names for s in synonyms) or param.name in synonyms
             if query_has_synonym and param_has_name:
-                score += 8
+                score += 12
 
         return score

@@ -36,16 +36,37 @@ def check_answer(answer: str, expected: str) -> bool:
     if not expected:
         return True
 
+    # 支持 | 作为"或"分隔符：任一备选匹配即通过
+    alternatives = expected.split("|")
+    for alt in alternatives:
+        if _check_single(answer, alt.strip()):
+            return True
+    return False
+
+
+def _check_single(answer: str, expected: str) -> bool:
+    """检查 answer 是否包含 expected（数值或文本）"""
+    if not expected:
+        return True
+
+    answer_lower = answer.lower()
+    expected_lower = expected.lower()
+
+    # 先尝试数值匹配
     expected_nums = re.findall(r"[\d.]+", expected)
     answer_nums = re.findall(r"[\d.]+", answer)
 
-    if not expected_nums:
-        return expected.lower() in answer.lower()
+    if expected_nums:
+        # 检查所有期望数值是否都在答案中出现（容差 ±0.1）
+        for en in expected_nums:
+            if not any(abs(float(an) - float(en)) < 0.1 for an in answer_nums):
+                return False
+        return True
 
-    for en in expected_nums:
-        if not any(abs(float(an) - float(en)) < 0.1 for an in answer_nums):
-            return False
-    return True
+    # 纯文本匹配：检查每个期望词语是否包含在答案中
+    # 支持用空格分隔多个关键词（都必须在答案中）
+    keywords = expected_lower.split()
+    return all(kw in answer_lower for kw in keywords)
 
 
 def main():

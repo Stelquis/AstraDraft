@@ -103,7 +103,15 @@ class QueryProcessor:
         if not nums:
             return None
 
-        target_val = float(nums[0])
+        # 仅当数字属于复合标识词时才跳过（部品1、零件2等），不跳过测量值
+        first_num = nums[0]
+        pos = question.find(first_num)
+        identifier_contexts = ["部品", "部件", "零件", "版本", "图号"]
+        if pos > 0 and any(ctx in question for ctx in identifier_contexts):
+            if re.match(r'[一-鿿]', question[pos-1]):
+                return None
+
+        target_val = float(first_num)
         matches = [
             p for p in self._index.parameters
             if abs(p.value - target_val) < 0.5 and p.unit == "mm"
@@ -128,7 +136,15 @@ class QueryProcessor:
         if not nums:
             return None
 
-        target_val = float(nums[0])
+        # 仅跳过复合标识词中的数字，不跳过测量值
+        first_num = nums[0]
+        pos = question.find(first_num)
+        identifier_contexts = ["部品", "部件", "零件", "版本", "图号"]
+        if pos > 0 and any(ctx in question for ctx in identifier_contexts):
+            if re.match(r'[一-鿿]', question[pos-1]):
+                return None
+
+        target_val = float(first_num)
         matches = [
             p for p in self._index.parameters
             if abs(p.value - target_val) < 0.5 and p.unit == "mm"

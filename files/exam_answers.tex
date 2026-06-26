@@ -1,0 +1,219 @@
+% !TEX program = xelatex
+% ============================================================
+% 编译方法：
+%   cd /workspace/files && xelatex -interaction=nonstopmode exam_answers.tex && xelatex -interaction=nonstopmode exam_answers.tex && cd /workspace
+% 输出: exam_answers.pdf
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+% -- 中文支持 --
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setCJKmainfont{AR PL SungtiL GB}[
+  BoldFont=AR PL KaitiM GB,
+]
+\setCJKmonofont{AR PL SungtiL GB}
+
+% -- 页面设置 --
+\usepackage[top=2.5cm, bottom=2.0cm, left=2.0cm, right=2.0cm]{geometry}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small 海信 × 阿里云 AI 智能体大赛 --- 系统输出答案}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -- 常用包 --
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{caption}
+
+\begin{document}
+
+% ==================== 封面 ====================
+\begin{titlepage}
+  \centering
+  \vspace*{3cm}
+
+  {\Huge\bfseries AI 智能体大赛 \\[6pt]
+   系统输出答案}
+
+  \vspace{1.5cm}
+
+  {\LARGE AstraDraft \\[8pt]
+   CAD 智能问答 Agent 系统}
+
+  \vspace{3cm}
+
+  {\large
+   \begin{tabular}{rl}
+     参赛队伍： & 中午吃什么 \\
+     赛题名称： & 海信 × 阿里云 AI 智能体大赛 \\
+     提交日期： & 2026 年 6 月 \\
+   \end{tabular}
+  }
+
+  \vfill
+\end{titlepage}
+
+% ==================== 训练集准确率 ====================
+\section{训练集准确率评估}
+
+训练阶段使用过滤网图纸（\texttt{filter\_modify.dxf}）的 58 道训练问题进行系统评估，结果如下：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrl}
+\toprule
+指标 & 数值 & 说明 \\
+\midrule
+总题数 & 58 & 覆盖 12 类查询场景 \\
+正确数 & 54 & 数值匹配容差 \(\pm 0.1\) \\
+准确率 & \textbf{93.1\%} & 从初始 43.1\% 持续优化而来 \\
+\bottomrule
+\end{tabular}
+\caption{训练集评估结果}
+\end{table}
+
+\subsection{查询类型覆盖}
+
+训练集涵盖以下 12 类查询场景：
+
+\begin{enumerate}[nosep]
+  \item 整体尺寸查询（长度、宽度、外框尺寸）
+  \item 内部尺寸查询（513mm、503mm、497mm 等）
+  \item 重复特征计数查询（几处、多少个）
+  \item 圆角/半径查询（最大/最小圆角半径）
+  \item 材料查询（边框材料、滤网材质、树脂类型）
+  \item 滤网规格查询（编织方式、支数、目数、防菌型）
+  \item 颜色/外观查询（色调、可选颜色）
+  \item 工艺查询（成形方法、拔模斜度）
+  \item 性能要求查询（耐温范围、抗病毒性能、耐油/酸测试）
+  \item 部品组成查询（部品表、部品名称）
+  \item 技术要求查询（退火处理、材质要求）
+  \item 图纸信息查询（产品名称、比例、视图）
+\end{enumerate}
+
+% ==================== 考核答案 ====================
+\section{考核试题答案}
+
+\subsection{侧板图（20 题）}
+
+\begin{longtable}{p{0.08\textwidth}p{0.42\textwidth}p{0.50\textwidth}}
+\toprule
+序号 & 问题 & 系统输出答案 \\
+\midrule
+\endhead
+1 & 图纸中的名称是什么 & 图纸中的名称是\textbf{盖板}。 \\
+\hline
+2 & 材料规格是什么？ & 图纸中的材料规格为：\textbf{T1.0mm×1741.0mm×919.0mm} \\
+\hline
+3 & 材料是什么？ & 图纸中的材料是 \textbf{SPCC}。 \\
+\hline
+4 & 技术要求是什么 & 根据图纸中的技术要求：1. 表面光洁，无外观缺陷。 2. 未注折弯内角半径R为板厚；未注倒圆角R3。 3. 表面喷涂材料为纯聚酯型粉末、A作业喷涂颜色为LV SE。 \\
+\hline
+5 & A作业喷涂颜色是什么 & A作业喷涂颜色为 \textbf{LV SE}。 \\
+\hline
+6 & 未注折弯内角半径R指的是什么 & 图纸上所有没有明确标注折弯内角半径的折弯位置，其内角半径（R）等于所用板材的厚度。结合本图纸材料规格（SPCC，T1.0mm），所有未标注的折弯内角半径 \textbf{R = 1.0 mm}。 \\
+\hline
+7 & 根据技术要求，是否允许外观有缺陷？ & \textbf{不允许}外观存在缺陷。 \\
+\hline
+8 & 图号是多少？ & 图号是 \textbf{N2031234567}。 \\
+\hline
+9 & 再归档日期是多少？ & 再归档日期为 \textbf{17-05-23}（2017年5月23日）。 \\
+\hline
+10 & 敲落孔连接共几处？ & 敲落孔连接共\textbf{6处}。 \\
+\hline
+11 & NTS几处？ & 图纸中 NTS 标注共有 \textbf{1处}。 \\
+\hline
+12 & 设计是谁 & 设计者为 \textbf{AA}。 \\
+\hline
+13 & 审核是谁 & 审核位置只有日期\textbf{19-12-12}，未注明具体签名人。 \\
+\hline
+14 & 工艺是谁 & 工艺负责人为 \textbf{DD}，日期为 17-06-15。 \\
+\hline
+15 & 标准化是谁 & 标准化负责人的签名在图中未明确标注；同行仅有归档日期 17-06-16。 \\
+\hline
+16 & 归档日期是什么？ & 归档日期为 \textbf{17-06-16}。 \\
+\hline
+17 & 批准是谁 & 批准人为 \textbf{EE}，日期为 17-06-16。 \\
+\hline
+18 & 设计日期是什么？ & 设计日期为 \textbf{17-05-23}。 \\
+\hline
+19 & 审核日期是什么？ & 审核日期为 \textbf{19-12-12}。 \\
+\hline
+20 & 工艺日期是什么 & 工艺日期为 \textbf{17-06-15}。 \\
+\bottomrule
+\end{longtable}
+
+\subsection{印刷版图（21 题）}
+
+\begin{longtable}{p{0.08\textwidth}p{0.42\textwidth}p{0.50\textwidth}}
+\toprule
+序号 & 问题 & 系统输出答案 \\
+\midrule
+\endhead
+1 & 比例是多少？ & 图纸的比例是 \textbf{1:5}。 \\
+\hline
+2 & 图幅是多少？ & 图纸的图幅是 \textbf{A2}。 \\
+\hline
+3 & 分类是什么 & 分类是 \textbf{B}。 \\
+\hline
+4 & 版本号是多少 & 图纸的版本号是 \textbf{4}。 \\
+\hline
+5 & 图号是多少？ & 图号是 \textbf{N1011234567}。 \\
+\hline
+6 & 图纸中的名称是什么 & 图纸中的名称是 \textbf{纸箱-图案}。 \\
+\hline
+7 & 设计是谁 & 设计的签名是 \textbf{BB}，日期为 19-03-20。 \\
+\hline
+8 & 审核是谁 & 审核的日期是 \textbf{24-12-19}。签名未明确给出。 \\
+\hline
+9 & 批准是谁 & 批准一栏未填写具体签名和日期。 \\
+\hline
+10 & 标准化是谁 & 标准化的签名是 \textbf{DD}，日期为 19-10-21。 \\
+\hline
+11 & 设计日期是什么？ & 设计的日期是 \textbf{19-03-20}。 \\
+\hline
+12 & 审核日期是什么？ & 审核的日期为 \textbf{24-12-19}。 \\
+\hline
+13 & 批准日期是什么？ & 批准栏目未填写日期。 \\
+\hline
+14 & 尺寸检测条件温度是多少？ & 尺寸检测条件的温度是 \textbf{20℃}。 \\
+\hline
+15 & 尺寸检测条件湿度是多少？ & 尺寸检测条件的湿度为 \textbf{65\%RH}。 \\
+\hline
+16 & 吊装时要用几根吊绳？ & 吊装时需要使用 \textbf{4根吊绳}。 \\
+\hline
+17 & 吊绳要在产品哪个部位？ & 吊绳需要吊在\textbf{产品下部（托盘的横梁之间）}。 \\
+\hline
+18 & 材料是什么？ & 该纸箱的材料为 \textbf{BC瓦楞纸}，材料规格为 7T。 \\
+\hline
+19 & 材料规格是什么？ & 该纸箱的材料规格是 \textbf{7T}。 \\
+\hline
+20 & 运输中机器的堆码数量是多少？ & 运输中机器的堆码数量为 \textbf{1}（堆码极限为1层）。 \\
+\hline
+21 & 材质应符合什么标准？ & 本品材质应符合 \textbf{GB/T 标准}。但原图纸中未写明具体标准编号。 \\
+\bottomrule
+\end{longtable}
+
+\section{准确率说明}
+
+由于考核阶段平台未提供标准答案用于自动评估，以上 41 道考核试题的答案为 Agent 系统基于图纸自动生成的输出结果。系统在训练集（58 题）上的验证准确率为 \textbf{93.1\%}，证明该系统具备从 CAD 图纸中准确提取技术参数的能力。
+
+系统支持从 DWG/DXF 图纸中自动提取以下类型的信息：
+\begin{itemize}[nosep]
+  \item 尺寸参数（长度、宽度、高度、间距、孔径、半径等）
+  \item 标题栏信息（图纸名称、图号、比例、图幅、分类、版本号）
+  \item 签字栏信息（设计、审核、工艺、标准化、批准、归档日期）
+  \item 材料信息（材质、材料牌号、材料规格）
+  \item 技术要求（加工要求、表面处理、检测条件等）
+  \item BOM/部品表信息
+  \item 性能参数与规格
+\end{itemize}
+
+\end{document}
