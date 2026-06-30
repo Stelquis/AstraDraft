@@ -4,8 +4,8 @@ import argparse
 import logging
 import sys
 
-from agent.config import AgentConfig
-from agent.core import Agent
+from backend.config import AgentConfig
+from agent.core import DeepAstraDraft
 
 
 def main():
@@ -16,11 +16,17 @@ def main():
             "示例:\n"
             "  python -m agent.cli --file data/cad/filter_modify.dxf\n"
             "  python -m agent.cli --file data/cad/filter_modify.dwg\n"
+            "  python -m agent.cli --file data/cad/filter_modify.dwg --engine deep\n"
         ),
     )
     parser.add_argument("--file", "-f", required=True, help="CAD 文件路径（.dxf 或 .dwg）")
     parser.add_argument("--log-level", default="INFO", help="日志级别 (DEBUG/INFO/WARNING)")
     parser.add_argument("--batch", help="批量查询模式：从文件读取问题（每行一个）")
+    parser.add_argument(
+        "--engine", choices=["rule", "llm", "deep"],
+        default="rule",
+        help="查询引擎: rule=规则匹配(默认), llm=LLM增强, deep=DeepAgent",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -30,10 +36,10 @@ def main():
     )
 
     config = AgentConfig(cad_file=args.file, log_level=args.log_level)
-    agent = Agent(config)
+    agent = DeepAstraDraft(config)
 
     try:
-        agent.load_cad()
+        agent.load_cad(args.file)
     except Exception as e:
         print(f"加载 CAD 文件失败: {e}", file=sys.stderr)
         sys.exit(1)

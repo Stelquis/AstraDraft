@@ -1,199 +1,300 @@
-from __future__ import annotations
+"""
+DeepAstraDraft 主 Agent。
 
-import json
+组装子 Agent、中间件、Skills、记忆，提供生产级 CAD 问答能力。
+
+用法:
+    from agent.core import DeepAstraDraft
+
+    agent = DeepAstraDraft()
+    agent.load_cad("data/cad/filter_modify.dwg")
+    answer = agent.ask("总长度是多少")
+"""
 import logging
 import os
-import re
+from pathlib import Path
 from typing import Optional
 
-import httpx
+from langchain_deepseek import ChatDeepSeek
 
-from agent.config import AgentConfig
+from backend.config import AgentConfig
 from agent.session import Session
-from cad_parser import CADParser
-from cad_understanding.component_recognizer import ComponentRecognizer
-from cad_understanding.parameter_index import ParameterIndex
-from cad_understanding.scale_inferencer import ScaleInferencer
-from nlp_interface.prompt_templates import SYSTEM_PROMPT
-from nlp_interface.query_processor import QueryProcessor
+from agent.filesystem import CADIndexFilesystem
+from agent.memory import AstraDraftMemory
+from backend.middleware import collect_middleware
+from agent.skills import SkillRegistry
+from agent.sub_agents import (
+    parser_subagent,
+    indexer_subagent,
+    evaluator_subagent,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class Agent:
+class DeepAstraDraft:
+    """生产级 CAD 智能问答 Agent（Deep Agents 架构）"""
+
     def __init__(self, config: Optional[AgentConfig] = None):
-        self._config = config or AgentConfig()
-        self._session = Session()
-        self._query_processor: Optional[QueryProcessor] = None
+        self.config = config or AgentConfig()
+        self.session = Session()
+        self.memory = AstraDraftMemory()
+        self.fs_backend = CADIndexFilesystem()
+        self.skills = SkillRegistry()
+
+        self._agent = None
+        self._index_dir: Optional[str] = None
+        self._llm: Optional[ChatDeepSeek] = None
         self._index = None
-        self._llm_available = False
-        self._cad_document = None
 
-    def load_cad(self, file_path: Optional[str] = None):
-        path = file_path or self._config.cad_file
-        if not path:
-            raise ValueError("No CAD file specified.")
+    # ================================================================
+    # 公共接口
+    # ================================================================
 
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"CAD file not found: {path}")
+    def load_cad(self, file_path: str):
+        """加载 CAD 图纸：解析 → 构建索引 → 导出虚拟文件系统 → 初始化 Agent"""
+        path = file_path
 
-        logger.info("Loading CAD file: %s", path)
+        # Step 1: 解析并构建索引（复用现有 Pipeline）
+        from cad.parser import CADParser
+        from cad.understanding.component_recognizer import ComponentRecognizer
+        from cad.understanding.parameter_index import ParameterIndex
+        from cad.understanding.scale_inferencer import ScaleInferencer
 
-        index_path = self._config.index_path
+        logger.info("Parsing CAD: %s", path)
+
+        index_path = self.config.index_path
         if os.path.isfile(str(index_path)):
             logger.info("Loading cached index: %s", index_path)
             self._index = ParameterIndex.load(str(index_path))
         else:
-            logger.info("Parsing CAD and building index...")
             parser = CADParser(path)
             doc = parser.parse()
-
             unit = ScaleInferencer().infer(doc)
             components = ComponentRecognizer().recognize(doc)
-
             idx = ParameterIndex()
             self._index = idx.build(doc)
             self._index.components = components
-            self._cad_document = doc
-
             os.makedirs(os.path.dirname(str(index_path)) or ".", exist_ok=True)
             idx.save(str(index_path))
 
+        # 单位归一化
         for param in self._index.parameters:
             if param.value == 0 and param.raw_text:
                 continue
             if not param.unit or param.unit == "inches":
                 param.unit = "mm"
 
-        self._query_processor = QueryProcessor(self._index)
-        self._llm_available = self._check_llm()
+        # Step 2: 导出虚拟文件系统
+        self._index_dir = self.fs_backend.export_index(
+            self._index, os.path.basename(path)
+        )
+        logger.info("Virtual FS ready: %s", self._index_dir)
 
-        logger.info("Agent ready. %d parameters indexed. LLM: %s",
-                     len(self._index.parameters), "enabled" if self._llm_available else "disabled")
+        # Step 3: 初始化 LLM + LangSmith 追踪
+        self._init_llm()
+        self._init_langsmith()
+
+        # Step 4: 发现 Skills
+        skill_names = self.skills.discover()
+        logger.info("Available skills: %s", skill_names)
+
+        # Step 5: 初始化 Deep Agent
+        self._init_agent()
+
+        logger.info("DeepAstraDraft ready. %d params, %d skills.",
+                     len(self._index.parameters), len(skill_names))
 
     def ask(self, question: str) -> str:
-        if self._query_processor is None:
-            raise RuntimeError("Agent not initialized. Call load_cad() first.")
+        """回答用户问题（使用 Deep Agent）"""
+        if self._agent:
+            return self._ask_deep(question)
+        return self._ask_fallback(question)
 
-        self._session.add("user", question)
+    # ================================================================
+    # 内部方法
+    # ================================================================
 
-        answer = self._query_processor.process(question)
+    def _init_llm(self):
+        """初始化 LLM 客户端"""
+        api_key = self.config.llm_api_key or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+        base_url = self.config.llm_base_url or os.environ.get(
+            "ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"
+        )
+        model = self.config.llm_model or os.environ.get(
+            "ANTHROPIC_MODEL", "deepseek-v4-flash[1m]"
+        )
+        if api_key:
+            self._llm = ChatDeepSeek(
+                model=model,
+                api_key=api_key,
+                api_base=base_url,
+                temperature=0,
+                max_tokens=1024,
+            )
+            logger.info("LLM ready: %s", model)
 
-        if self._llm_available and (self._is_fallback_answer(answer) or self._is_complex_question(question)):
-            llm_answer = self._ask_llm(question)
-            if llm_answer:
-                answer = llm_answer
+    def _init_langsmith(self):
+        """初始化 LangSmith 全链路追踪（可选）"""
+        ls_key = (self.config.langsmith_api_key
+                  or os.environ.get("LANGCHAIN_API_KEY", ""))
+        if ls_key:
+            os.environ["LANGCHAIN_API_KEY"] = ls_key
+            os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
+            os.environ.setdefault(
+                "LANGCHAIN_PROJECT",
+                self.config.langsmith_project or "deepastradraft",
+            )
+            os.environ.setdefault(
+                "LANGCHAIN_ENDPOINT",
+                self.config.langsmith_endpoint or "https://api.smith.langchain.com",
+            )
+            logger.info("LangSmith tracing enabled (project: %s)",
+                         os.environ["LANGCHAIN_PROJECT"])
 
-        self._session.add("assistant", answer)
+    def _init_agent(self):
+        """初始化 Deep Agent（Phase 3 核心）"""
+        try:
+            from deepagents import create_deep_agent
+
+            # 收集中间件
+            middleware = collect_middleware(self._index_dir)
+
+            self._agent = create_deep_agent(
+                model=self._llm,
+                system_prompt=self._build_system_prompt(),
+                subagents=[
+                    parser_subagent,
+                    indexer_subagent,
+                    evaluator_subagent,
+                ],
+                middleware=middleware,
+                tools=self._build_tools(),
+                checkpointer=self.memory.checkpointer if self.memory else None,
+            )
+            logger.info("Deep Agent created with %d subagents, %d middleware",
+                         3, len(middleware))
+        except Exception as e:
+            logger.warning("Failed to create Deep Agent, will use fallback: %s", e)
+            self._agent = None
+
+    def _build_system_prompt(self) -> str:
+        skills_prompt = self.skills.build_system_prompt()
+        return (
+            "你是 DeepAstraDraft，一个工业级 CAD 图纸智能问答助手。\n\n"
+            "## 工作流程\n"
+            "1. 分析用户问题\n"
+            "2. 在图纸索引文件中查询参数\n"
+            "3. 简洁准确地回答\n\n"
+            f"## 图纸索引\n"
+            f"索引目录: {self._index_dir}\n"
+            "  - summary.md — 索引摘要\n"
+            "  - dimensions.txt — 尺寸参数（按值降序）\n"
+            "  - info_params.txt — 信息参数\n"
+            "  - parameters.json — 完整数据\n\n"
+            f"{skills_prompt}\n\n"
+            "## 回答规则\n"
+            "- 只回答索引中存在的参数\n"
+            "- 数值参数: 格式 '数值 单位'\n"
+            "- 信息参数: 给出原始文本\n"
+            "- 未找到时说'未找到'\n"
+        )
+
+    def _build_tools(self):
+        """构建自定义查询工具"""
+        from langchain_core.tools import tool
+
+        @tool
+        def lookup_parameter(name: str) -> str:
+            """按名称查询 CAD 参数。输入中文或英文参数名，返回详情。"""
+            if not self._index:
+                return "索引未加载"
+            import json
+            for p in self._index.parameters:
+                if p.name == name or name in p.aliases:
+                    if p.value > 0 or p.unit:
+                        return json.dumps({
+                            "name": p.name, "value": p.value,
+                            "unit": p.unit, "layer": p.layer,
+                        }, ensure_ascii=False)
+                    return json.dumps({
+                        "name": p.name, "raw_text": p.raw_text[:500],
+                        "layer": p.layer,
+                    }, ensure_ascii=False)
+            return f"未找到参数: {name}"
+
+        @tool
+        def list_all_parameters(query: str = "") -> str:
+            """列出所有可用参数名。可选 query 过滤。"""
+            if not self._index:
+                return "索引未加载"
+            names = []
+            for p in self._index.parameters:
+                if not query or query.lower() in p.name.lower():
+                    names.append(p.name)
+            return "\n".join(names)
+
+        @tool
+        def search_by_value(value: float, tolerance: float = 0.5) -> str:
+            """按数值搜索参数。返回匹配的参数列表。"""
+            if not self._index:
+                return "索引未加载"
+            matches = []
+            for p in self._index.parameters:
+                if p.value > 0 and abs(p.value - value) < tolerance:
+                    matches.append(f"{p.name} = {p.value} {p.unit}")
+            if matches:
+                return f"找到 {len(matches)} 个匹配:\n" + "\n".join(matches)
+            return f"未找到数值 {value} 附近的参数"
+
+        return [lookup_parameter, list_all_parameters, search_by_value]
+
+    # ================================================================
+    # 查询执行
+    # ================================================================
+
+    def _ask_deep(self, question: str) -> str:
+        """使用 Deep Agent 回答"""
+        try:
+            config = {"configurable": {"thread_id": "cad-session-1"}}
+            result = self._agent.invoke(
+                {"messages": [{"role": "user", "content": question}]},
+                config=config,
+            )
+            answer = result["messages"][-1].content
+            self.memory.record_query(question, answer, "deep_agent")
+            return answer
+        except Exception as e:
+            logger.warning("Deep Agent query failed, falling back: %s", e)
+            return self._ask_fallback(question)
+
+    def _ask_fallback(self, question: str) -> str:
+        """回退到规则引擎查询"""
+        from cad.nlp.query_processor import QueryProcessor
+        import re
+
+        if not self._index:
+            return "Agent 未初始化，请先调用 load_cad()"
+
+        qp = QueryProcessor(self._index)
+        answer = qp.process(question)
+        self.memory.record_query(question, answer, "rule")
         return answer
 
-    def _is_fallback_answer(self, answer: str) -> bool:
-        if "未找到" in answer or "抱歉" in answer:
-            return True
-        if "没有" in answer and ("参数" in answer or "数据" in answer or "图纸" in answer):
-            return True
-        if "图纸中" in answer and "未" in answer:
-            return True
-        if "= 0.0" in answer:
-            return True
-        if "可查询的参数" in answer:
-            return True
-        return False
-
-    def _is_complex_question(self, question: str) -> bool:
-        if re.search(r"\d+.*几[处个]", question) or re.search(r"几[处个].*\d+", question):
-            return False
-        if re.search(r"几[处个]$", question) and re.search(r"\d", question):
-            return False
-        complex_patterns = [
-            r"分别|组成|结构",
-            r"什么材料|什么用|做什么|技术要求|技术条件",
-            r"性能|测试|要求|温度|范围",
-            r"耐[油酸寒热]|抗[病氧]",
-            r"部品|部件",
-            # 扩展模式：覆盖标题栏/签字栏/技术要求问题
-            r"名称|图号|比例|图幅|分类|版本号|版本",
-            r"设计|审核|工艺|标准化|批准|归档",
-            r"日期|签名|签字|是谁|喷涂|颜色|颜色",
-            r"外观|缺陷|缺陷|折弯|半径|吊装|吊绳|堆码|堆码",
-            r"材质|材料|规格|标准|温度|湿度|尺寸检测",
-            r"序号|编号|索引|位置",
-        ]
-        return any(re.search(p, question) for p in complex_patterns)
-
-    def _check_llm(self) -> bool:
-        api_key = self._config.llm_api_key or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-        return bool(api_key)
-
-    def _ask_llm(self, question: str) -> Optional[str]:
-        try:
-            params_context = self._build_params_context()
-            system = SYSTEM_PROMPT.format(parameters_context=params_context)
-
-            api_key = self._config.llm_api_key or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-            base_url = self._config.llm_base_url or os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic")
-            model = self._config.llm_model or os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-pro[1m]")
-
-            history = [{"role": m.role, "content": m.content} for m in self._session.history[-6:]]
-
-            response = httpx.post(
-                f"{base_url}/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "max_tokens": 1024,
-                    "system": system,
-                    "messages": history + [{"role": "user", "content": question}],
-                },
-                timeout=30,
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                content = data.get("content", [])
-                for block in content:
-                    if block.get("type") == "text" and block.get("text"):
-                        return block["text"]
-        except Exception as e:
-            logger.warning("LLM query failed: %s", e)
-
-        return None
-
-    def _build_params_context(self) -> str:
-        if not self._index:
-            return "无可用参数"
-
-        lines = ["===== 图纸参数 ====="]
-        for p in self._index.parameters:
-            if p.value == 0 and p.raw_text:
-                lines.append(f"- {p.name}: {p.raw_text} (图层: {p.layer})")
-            else:
-                lines.append(f"- {p.name} = {p.value} {p.unit} (ID: {p.source_dim_id}, 图层: {p.layer})")
-
-        # 添加全部文本注释
-        if self._cad_document:
-            lines.append("\n===== 图纸全部文字注释 =====")
-            for t in self._cad_document.text_annotations:
-                txt = t.text.strip().replace("\n", " \\n ")
-                if txt:
-                    lines.append(f"[图层:{t.layer}] (位置:{t.position.get('x',0):.0f},{t.position.get('y',0):.0f}): {txt}")
-
-        return "\n".join(lines)
-
-    @property
-    def session(self) -> Session:
-        return self._session
+    # ================================================================
+    # 属性
+    # ================================================================
 
     @property
     def parameter_count(self) -> int:
         return len(self._index.parameters) if self._index else 0
 
     @property
-    def parameter_names(self) -> list[str]:
+    def parameter_names(self) -> list:
         if self._index:
             return [p.name for p in self._index.parameters]
         return []
+
+    @property
+    def is_deep_agent_available(self) -> bool:
+        return self._agent is not None

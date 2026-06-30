@@ -1,0 +1,261 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import ChapterCard from '../components/ChapterCard.astro';
+import SectionHeading from '../components/SectionHeading.astro';
+import ChapterRail from '../components/ChapterRail.astro';
+import '../styles/global.css';
+
+const allChapters = await getCollection('chapters');
+const sorted = allChapters.sort((a, b) => a.data.order - b.data.order);
+
+const sections = ['准备篇', '认知篇', '核心篇', '进阶篇', '实战篇'] as const;
+const grouped = sections.map(section => ({
+  section,
+  chapters: sorted.filter(ch => ch.data.section === section),
+}));
+
+// Rail navigation data: published chapters only, sections with >=1 published chapter.
+// Same source as the cards, so rail items always have a matching card anchor (ch-<id>).
+const railSections = grouped
+  .map(({ section, chapters }) => ({
+    section,
+    items: chapters
+      .filter(ch => ch.data.published)
+      .map(ch => ({ id: ch.id, title: ch.data.title })),
+  }))
+  .filter(group => group.items.length > 0);
+
+const publishedCount = sorted.filter(ch => ch.data.published && ch.data.section !== '准备篇').length;
+
+let starCount: number | null = null;
+try {
+  const res = await fetch('https://api.github.com/repos/datawhalechina/deepagents-in-action', {
+    headers: { 'User-Agent': 'deepagents-site-build' },
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (typeof data.stargazers_count === 'number') starCount = data.stargazers_count;
+  }
+} catch {}
+---
+
+<BaseLayout title="Deep Agents 实战 — 从零构建生产级 AI Agent 的完整指南">
+  <Header />
+  <main class="max-w-6xl mx-auto px-6">
+    <!-- Hero -->
+    <section class="py-24 md:py-32 text-center relative">
+      <div class="absolute inset-0 bg-dot-grid opacity-[0.03] pointer-events-none"></div>
+      <div class="relative max-w-2xl mx-auto">
+
+        <!-- Community eyebrow -->
+        <div class="flex items-center justify-center gap-2.5 mb-8">
+          <img src={`${import.meta.env.BASE_URL}/imgs/langchain-community.svg`} alt="LangChain Community" class="h-[18px] opacity-60" />
+          <span class="w-px h-3.5 bg-ink-muted/20 inline-block"></span>
+          <span class="text-[11px] font-mono text-ink-muted/50 tracking-wider uppercase">Open Source Course</span>
+        </div>
+
+        <!-- Title -->
+        <h1 class="text-4xl md:text-[3.75rem] font-black font-sans tracking-tight text-ink leading-[1.08] mb-5 md:whitespace-nowrap">
+          Deep Agents <span class="text-gold">实战</span>
+        </h1>
+
+        <!-- Subtitle -->
+        <p class="text-lg md:text-xl text-ink-muted leading-relaxed mb-4">
+          基于 LangChain / LangGraph 生态<br class="hidden sm:block" />
+          系统构建生产级 AI Agent 的完整指南
+        </p>
+
+        <!-- SDK version tag -->
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gold-pale/40 border border-gold/20 mb-10">
+          <span class="w-1 h-1 rounded-full bg-gold inline-block"></span>
+          <span class="text-[11px] font-mono text-gold/80 tracking-wide">Deep Agents SDK ≥ 0.5</span>
+        </div>
+
+        <!-- CTAs -->
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-12">
+          <a href={`${import.meta.env.BASE_URL}/chapters/ch01-agent-harness/`}
+            class="inline-flex items-center gap-2 px-7 py-3 bg-ink text-paper text-sm font-semibold rounded-lg hover:bg-ink-light transition-colors shadow-sm">
+            开始阅读
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+          </a>
+          <a href="https://space.bilibili.com/28357052/lists/7757577?type=season" target="_blank" rel="noopener"
+            class="inline-flex items-center gap-2 px-7 py-3 border border-gold/40 text-ink-muted text-sm font-medium rounded-lg hover:border-gold hover:text-gold transition-colors">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z"/></svg>
+            B 站合集
+          </a>
+          <a href="https://www.xiaohongshu.com/collection/item/69c4fd2a0072000000000001?xhsshare=&appuid=65032a0300000000120065e8&apptime=1778152909&share_id=2abb593f301a4e60a6e71fbbee3c8967" target="_blank" rel="noopener"
+            class="inline-flex items-center gap-2 px-7 py-3 border border-gold/40 text-ink-muted text-sm font-medium rounded-lg hover:border-gold hover:text-gold transition-colors">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
+            小红书合集
+          </a>
+          <a href="https://github.com/datawhalechina/deepagents-in-action" target="_blank" rel="noopener"
+            aria-label="给本课程在 GitHub 点 Star"
+            class="inline-flex items-center gap-2 px-7 py-3 border border-gold/40 text-ink-muted text-sm font-medium rounded-lg hover:border-gold hover:text-gold transition-colors group">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+            GitHub Star
+            <span
+              id="gh-star-count"
+              class:list={["ml-1 px-1.5 py-0.5 rounded text-xs font-mono bg-gold-pale/60 text-gold border border-gold/20", !starCount && "hidden"]}
+            >{starCount ?? ''}</span>
+          </a>
+        </div>
+
+        <!-- Divider + Author -->
+        <div class="flex items-center gap-4 justify-center">
+          <div class="h-px flex-1 bg-gradient-to-r from-transparent to-gold/20 hidden sm:block"></div>
+          <div class="inline-flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-4 py-2 rounded-full bg-paper-warm border border-gold-pale text-nowrap">
+            <span class="text-xs text-ink-muted/60 font-mono">by</span>
+            <a href="https://space.bilibili.com/28357052" target="_blank" rel="noopener"
+              class="text-xs sm:text-sm font-medium text-ink hover:text-gold transition-colors">沧海九粟</a>
+            <span class="text-gold/30 text-xs">·</span>
+            <span class="text-[11px] sm:text-xs text-ink-muted/60">LangChain 官方大使</span>
+            <span class="text-gold/30 text-xs">·</span>
+            <span class="text-[11px] sm:text-xs text-ink-muted/60">已发布 {publishedCount} 章</span>
+          </div>
+          <div class="h-px flex-1 bg-gradient-to-l from-transparent to-gold/20 hidden sm:block"></div>
+        </div>
+
+        <!-- Compute support -->
+        <a href="https://cloud.siliconflow.cn/i/Fq9zUwPf" target="_blank" rel="noopener"
+          class="group mt-5 inline-flex items-center gap-2 text-ink-muted/50 hover:text-ink-muted transition-colors">
+          <span class="text-[11px] font-mono tracking-wide uppercase">模型算力支持</span>
+          <span class="w-px h-3 bg-ink-muted/20 inline-block"></span>
+          <img src={`${import.meta.env.BASE_URL}/imgs/siliconflow-mark.svg`} alt="" class="h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <span class="text-xs font-medium">硅基流动 SiliconFlow</span>
+        </a>
+
+      </div>
+    </section>
+
+    <ChapterRail sections={railSections} />
+    <div class="min-w-0">
+    <!-- Chapter list by section -->
+    {grouped.map(({ section, chapters }) => {
+      const hasPublished = chapters.some(ch => ch.data.published);
+      return hasPublished ? (
+        <section id={`sec-${section}`} class="mb-12 scroll-mt-24">
+          {section === '准备篇' ? (
+            <div class="skills-promo-combined">
+              <div class="skills-promo-combined__header">
+                <div class="skills-promo-combined__title-row">
+                  <span class="skills-promo-combined__icon">◆</span>
+                  <h2 class="skills-promo-combined__title">准备篇</h2>
+                  <span class="skills-promo-combined__sep">·</span>
+                  <span class="skills-promo-combined__subtitle">开发辅助技能推荐</span>
+                </div>
+                <p class="skills-promo-combined__desc">安装核心技能，让 AI 编码助手提供 LangChain 生态的专业指导</p>
+              </div>
+              <div class="skills-promo__grid">
+                <div class="skills-promo__card">
+                  <div class="skills-promo__card-top">
+                    <div class="skills-promo__card-name">langchain-dev-guide</div>
+                    <div class="skills-promo__card-actions">
+                      <a href="https://github.com/ob-labs/agentseek/tree/main/skills/langchain-dev-guide" target="_blank" rel="noopener" class="skills-promo__action" title="查看源码">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                      </a>
+                      <button class="skills-promo__action" title="复制安装命令" data-copy="npx skills add ob-labs/agentseek --skill langchain-dev-guide">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="skills-promo__card-desc">LangChain / LangGraph 开发指南：工程陷阱与验证修复方案，涵盖模型集成、中间件、流式输出、多 Agent 编排</div>
+                  <code class="skills-promo__card-cmd">npx skills add ob-labs/agentseek --skill langchain-dev-guide</code>
+                </div>
+                <div class="skills-promo__card">
+                  <div class="skills-promo__card-top">
+                    <div class="skills-promo__card-name">langsmith-trace</div>
+                    <div class="skills-promo__card-actions">
+                      <a href="https://github.com/ob-labs/agentseek/tree/main/skills/langsmith-trace" target="_blank" rel="noopener" class="skills-promo__action" title="查看源码">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                      </a>
+                      <button class="skills-promo__action" title="复制安装命令" data-copy="npx skills add ob-labs/agentseek --skill langsmith-trace">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="skills-promo__card-desc">LangSmith 追踪与调试：为应用添加 Tracing、查询和导出 Trace 数据，定位性能瓶颈与异常行为</div>
+                  <code class="skills-promo__card-cmd">npx skills add ob-labs/agentseek --skill langsmith-trace</code>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <SectionHeading title={section} />
+          )}
+          <div class="grid md:grid-cols-2 gap-5">
+          {chapters.map(ch => (
+            <div id={`ch-${ch.id}`} class="scroll-mt-24 grid">
+              <ChapterCard
+                id={ch.id}
+                title={ch.data.title}
+                chapter={ch.data.chapter}
+                section={ch.data.section}
+                description={ch.data.description}
+                published={ch.data.published}
+                slides={ch.data.slides}
+                bilibili={ch.data.bilibili}
+                xhs={ch.data.xhs}
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+      ) : null;
+    })}
+      </div>
+  </main>
+  <Footer />
+</BaseLayout>
+
+
+<script>
+  (async () => {
+    const el = document.getElementById('gh-star-count');
+    if (!el) return;
+
+    const CACHE_KEY = 'gh-star-count:datawhalechina/deepagents-in-action';
+    const TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+    const apply = (n: number) => {
+      el.textContent = String(n);
+      el.classList.remove('hidden');
+    };
+
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { n, t } = JSON.parse(cached);
+        if (Date.now() - t < TTL_MS && typeof n === 'number') {
+          apply(n);
+          return;
+        }
+      }
+    } catch {}
+
+    try {
+      const res = await fetch('https://api.github.com/repos/datawhalechina/deepagents-in-action');
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      if (typeof data.stargazers_count === 'number') {
+        apply(data.stargazers_count);
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ n: data.stargazers_count, t: Date.now() }));
+        } catch {}
+      }
+    } catch {}
+  })();
+
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = (btn as HTMLElement).dataset.copy!;
+      navigator.clipboard.writeText(text).then(() => {
+        const svg = btn.querySelector('svg')!;
+        const orig = svg.innerHTML;
+        svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+        setTimeout(() => { svg.innerHTML = orig; }, 1500);
+      });
+    });
+  });
+</script>

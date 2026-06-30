@@ -1,0 +1,42 @@
+---
+import { getCollection, render } from 'astro:content';
+import ChapterLayout from '../../layouts/ChapterLayout.astro';
+import '../../styles/global.css';
+
+export async function getStaticPaths() {
+  const chapters = await getCollection('chapters', ({ data }) => data.published);
+  const all = (await getCollection('chapters'))
+    .filter(c => c.data.published)
+    .sort((a, b) => a.data.order - b.data.order);
+
+  return chapters.map((ch) => {
+    const idx = all.findIndex(c => c.id === ch.id);
+    const prev = idx > 0 ? { id: all[idx - 1].id, title: all[idx - 1].data.title, chapter: all[idx - 1].data.chapter } : null;
+    const next = idx < all.length - 1 ? { id: all[idx + 1].id, title: all[idx + 1].data.title, chapter: all[idx + 1].data.chapter } : null;
+
+    return {
+      params: { slug: ch.id },
+      props: { chapter: ch, prev, next },
+    };
+  });
+}
+
+const { chapter, prev, next } = Astro.props;
+const { Content, headings } = await render(chapter);
+---
+
+<ChapterLayout
+  title={chapter.data.title}
+  chapter={chapter.data.chapter}
+  section={chapter.data.section}
+  description={chapter.data.description}
+  slides={chapter.data.slides}
+  bilibili={chapter.data.bilibili || chapter.data.slides?.[0]?.bilibili}
+  xhs={chapter.data.xhs || chapter.data.slides?.[0]?.xhs}
+  chapterId={chapter.id}
+  headings={headings}
+  prev={prev}
+  next={next}
+>
+  <Content />
+</ChapterLayout>

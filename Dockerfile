@@ -264,7 +264,15 @@ ENV NODE_ENV=development
 COPY .vscode/settings.json /root/.local/share/code-server/Machine/settings.json
 
 # ---------------------------------------------------------------------------
-# 第十一部分: 工作目录与启动命令
+# 第十一部分: 前端构建（Phase 5 — v1.0 Web 界面）
+# ---------------------------------------------------------------------------
+
+# 构建 Vue 3 + TDesign 前端，产物输出到 frontend/dist/
+COPY frontend/ /workspace/frontend/
+RUN cd /workspace/frontend && npm install && npx vite build && rm -rf node_modules
+
+# ---------------------------------------------------------------------------
+# 第十二部分: 工作目录与启动命令
 # ---------------------------------------------------------------------------
 
 # 设置容器默认工作目录

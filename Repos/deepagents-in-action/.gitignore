@@ -1,0 +1,14 @@
+# generated content
+src/content/chapters/
+
+# build output
+dist/
+
+# dependencies
+node_modules/
+
+# astro
+.astro/
+
+# local planning docs (superpowers)
+docs/superpowers/
